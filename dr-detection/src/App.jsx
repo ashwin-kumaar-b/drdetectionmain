@@ -17,6 +17,7 @@ import {
   ScanEye,
   FileText,
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import './App.css';
 
 /* ─────────────────────────────────────────────
@@ -521,7 +522,7 @@ function HowItWorks() {
     {
       icon: BarChart3,
       title: 'Clinical Report',
-      desc: 'Grad-CAM heatmaps highlight affected regions to support clinician decision-making.',
+      desc: 'An automated summary diagnostic report is generated detailing clinical notes and findings.',
     },
   ];
 
@@ -571,7 +572,7 @@ function TechStack() {
     { name: 'TensorFlow / Keras', category: 'Framework' },
     { name: 'CLAHE Preprocessing', category: 'Image Processing' },
     { name: 'APTOS 2019 Dataset', category: 'Training Data' },
-    { name: 'Grad-CAM', category: 'Explainability' },
+    { name: 'ONNX Runtime', category: 'Inference Engine' },
   ];
 
   return (
@@ -899,6 +900,146 @@ function Demo() {
     }
   };
 
+  const loadSampleImage = async (path, filename) => {
+    setLoading(true);
+    setError('');
+    setAnalysisResult(null);
+    try {
+      const response = await fetch(path);
+      if (!response.ok) {
+        throw new Error(`Failed to load sample image: ${response.statusText}`);
+      }
+      const blob = await response.blob();
+      const file = new File([blob], filename, { type: 'image/jpeg' });
+      
+      const objectUrl = URL.createObjectURL(file);
+      setPreview(objectUrl);
+      setSelectedFile(file);
+    } catch (err) {
+      setError(err.message || 'Failed to load sample image.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generatePDF = () => {
+    if (!analysisResult) return;
+    
+    const doc = new jsPDF();
+    
+    // Header banner color
+    doc.setFillColor(15, 23, 42);
+    doc.rect(0, 0, 210, 38, 'F');
+    
+    // Brand title in banner
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.setTextColor(255, 255, 255);
+    doc.text("RetinAI Clinical Report", 20, 16);
+    
+    // Subtitle in banner
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Automated Diabetic Retinopathy Diagnostic Screening", 20, 25);
+    
+    // Metadata block
+    doc.setFillColor(248, 250, 252);
+    doc.rect(20, 46, 170, 28, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(20, 46, 170, 28, 'S');
+    
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Report ID: DR-REC-${Math.floor(100000 + Math.random() * 900000)}`, 25, 54);
+    doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 25, 62);
+    doc.text(`Time: ${new Date().toLocaleTimeString()}`, 25, 70);
+    
+    doc.text(`Patient Name: Anonymous Case Study`, 110, 54);
+    doc.text(`Image Filename: ${selectedFile ? selectedFile.name : 'Sample_fundus.jpg'}`, 110, 62);
+    doc.text(`Model: EfficientNet-B4 + ONNX`, 110, 70);
+    
+    // Diagnostic Header
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("Primary Diagnostic Findings", 20, 88);
+    doc.line(20, 92, 190, 92);
+    
+    // Diagnosis Box
+    doc.setFillColor(240, 246, 255);
+    doc.rect(20, 97, 170, 20, 'F');
+    doc.setDrawColor(191, 219, 254);
+    doc.rect(20, 97, 170, 20, 'S');
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(29, 78, 216);
+    doc.text(`DIAGNOSIS: ${analysisResult.label}`, 25, 106);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Confidence Level: ${analysisResult.confidence.toFixed(1)}%`, 130, 106);
+    
+    // Clinical Notes
+    doc.setFontSize(10.5);
+    doc.setFont("helvetica", "bold");
+    doc.text("Clinical Findings Summary:", 20, 128);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(51, 65, 85);
+    
+    const splitReport = doc.splitTextToSize(analysisResult.report, 170);
+    doc.text(splitReport, 20, 135);
+    
+    // Calculate the height of the printed report text dynamically
+    const reportHeight = splitReport.length * 6;
+    let nextSectionY = 135 + reportHeight + 12;
+ 
+    // Severity Breakdown
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("Probability Breakdown", 20, nextSectionY);
+    doc.line(20, nextSectionY + 4, 190, nextSectionY + 4);
+    
+    let currentY = nextSectionY + 12;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    Object.entries(analysisResult.scores).forEach(([name, score]) => {
+      doc.setTextColor(71, 85, 105);
+      doc.text(name, 20, currentY);
+      
+      // Bar background
+      doc.setFillColor(241, 245, 249);
+      doc.rect(65, currentY - 3, 100, 4, 'F');
+      
+      // Bar fill
+      doc.setFillColor(59, 130, 246);
+      doc.rect(65, currentY - 3, Math.floor(100 * score), 4, 'F');
+      
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${(score * 100).toFixed(1)}%`, 172, currentY);
+      doc.setFont("helvetica", "normal");
+      
+      currentY += 8;
+    });
+    
+    // Divider - positioned relative to the list end
+    const dividerY = Math.max(252, currentY + 8);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(20, dividerY, 190, dividerY);
+    
+    // Medical Disclaimer footer - dynamically offsets past dividerY
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.setFont("helvetica", "oblique");
+    doc.text("Medical Disclaimer: This AI-generated report is provided for screening research purposes only.", 20, dividerY + 8);
+    doc.text("It does not replace clinical consultation, ophthalmic review, or definitive medical diagnosis.", 20, dividerY + 13);
+    doc.text("Please consult a board-certified ophthalmologist for complete medical evaluation.", 20, dividerY + 18);
+    
+    doc.save(`Clinical_Report_DR_${analysisResult.label.replace(/\s+/g, '_')}.pdf`);
+  };
+
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
 
@@ -1002,6 +1143,30 @@ function Demo() {
           whileInView="visible"
           viewport={{ once: true, margin: '-80px' }}
         >
+          {!selectedFile && !loading && (
+            <div className="sample-images-container">
+              <span className="sample-label">Quick Test Samples:</span>
+              <div className="sample-buttons">
+                <button 
+                  type="button" 
+                  className="sample-btn"
+                  onClick={() => loadSampleImage('/normal.jpg', 'sample_normal.jpg')}
+                >
+                  <img src="/normal.jpg" alt="Normal sample" className="sample-thumb" />
+                  <span>Normal Retina</span>
+                </button>
+                <button 
+                  type="button" 
+                  className="sample-btn"
+                  onClick={() => loadSampleImage('/moderate.jpg', 'sample_moderate.jpg')}
+                >
+                  <img src="/moderate.jpg" alt="Moderate sample" className="sample-thumb" />
+                  <span>Moderate NPDR</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <input
             ref={fileInputRef}
             type="file"
@@ -1131,11 +1296,23 @@ function Demo() {
               transition={{ duration: 0.5 }}
             >
               <div className="results-header">
-                <Brain size={24} className="results-icon" />
-                <h3>Diagnosis: <span className="highlight-label">{analysisResult.label}</span></h3>
-                <span className="confidence-badge">
-                  {analysisResult.confidence.toFixed(1)}% Confidence
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <Brain size={24} className="results-icon" />
+                  <h3>Diagnosis: <span className="highlight-label">{analysisResult.label}</span></h3>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span className="confidence-badge">
+                    {analysisResult.confidence.toFixed(1)}% Confidence
+                  </span>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary pdf-btn"
+                    onClick={generatePDF}
+                    style={{ padding: '0.35rem 0.85rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-head)' }}
+                  >
+                    <FileText size={14} /> Download PDF
+                  </button>
+                </div>
               </div>
               
               <div className="results-content">
@@ -1179,7 +1356,7 @@ function Demo() {
             {[
               { icon: Eye, text: 'Fundus photography input' },
               { icon: Zap, text: 'Results in under 2 seconds' },
-              { icon: Brain, text: 'Grad-CAM heatmap included' },
+              { icon: FileText, text: 'Detailed PDF report generated' },
             ].map(({ icon: Icon, text }, i) => (
               <motion.div key={i} className="demo-info-card" variants={popIn}>
                 <Icon size={20} />
