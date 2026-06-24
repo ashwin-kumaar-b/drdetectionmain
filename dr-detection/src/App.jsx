@@ -925,119 +925,150 @@ function Demo() {
   const generatePDF = () => {
     if (!analysisResult) return;
     
-    const doc = new jsPDF();
-    
-    // Header banner color
-    doc.setFillColor(15, 23, 42);
-    doc.rect(0, 0, 210, 38, 'F');
-    
-    // Brand title in banner
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(255, 255, 255);
-    doc.text("RetinAI Clinical Report", 20, 16);
-    
-    // Subtitle in banner
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(148, 163, 184);
-    doc.text("Automated Diabetic Retinopathy Diagnostic Screening", 20, 25);
-    
-    // Metadata block
-    doc.setFillColor(248, 250, 252);
-    doc.rect(20, 46, 170, 28, 'F');
-    doc.setDrawColor(226, 232, 240);
-    doc.rect(20, 46, 170, 28, 'S');
-    
-    doc.setFontSize(10);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Report ID: DR-REC-${Math.floor(100000 + Math.random() * 900000)}`, 25, 54);
-    doc.text(`Date Generated: ${new Date().toLocaleDateString()}`, 25, 62);
-    doc.text(`Time: ${new Date().toLocaleTimeString()}`, 25, 70);
-    
-    doc.text(`Patient Name: Anonymous Case Study`, 110, 54);
-    doc.text(`Image Filename: ${selectedFile ? selectedFile.name : 'Sample_fundus.jpg'}`, 110, 62);
-    doc.text(`Model: EfficientNet-B4 + ONNX`, 110, 70);
-    
-    // Diagnostic Header
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(15, 23, 42);
-    doc.text("Primary Diagnostic Findings", 20, 88);
-    doc.line(20, 92, 190, 92);
-    
-    // Diagnosis Box
-    doc.setFillColor(240, 246, 255);
-    doc.rect(20, 97, 170, 20, 'F');
-    doc.setDrawColor(191, 219, 254);
-    doc.rect(20, 97, 170, 20, 'S');
-    
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(29, 78, 216);
-    doc.text(`DIAGNOSIS: ${analysisResult.label}`, 25, 106);
-    doc.setTextColor(15, 23, 42);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Confidence Level: ${analysisResult.confidence.toFixed(1)}%`, 130, 106);
-    
-    // Clinical Notes
-    doc.setFontSize(10.5);
-    doc.setFont("helvetica", "bold");
-    doc.text("Clinical Findings Summary:", 20, 128);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(51, 65, 85);
-    
-    const splitReport = doc.splitTextToSize(analysisResult.report, 170);
-    doc.text(splitReport, 20, 135);
-    
-    // Calculate the height of the printed report text dynamically
-    const reportHeight = splitReport.length * 6;
-    let nextSectionY = 135 + reportHeight + 12;
- 
-    // Severity Breakdown
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(15, 23, 42);
-    doc.text("Probability Breakdown", 20, nextSectionY);
-    doc.line(20, nextSectionY + 4, 190, nextSectionY + 4);
-    
-    let currentY = nextSectionY + 12;
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    Object.entries(analysisResult.scores).forEach(([name, score]) => {
-      doc.setTextColor(71, 85, 105);
-      doc.text(name, 20, currentY);
+    const img = new Image();
+    img.src = preview;
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const doc = new jsPDF();
       
-      // Bar background
-      doc.setFillColor(241, 245, 249);
-      doc.rect(65, currentY - 3, 100, 4, 'F');
-      
-      // Bar fill
-      doc.setFillColor(59, 130, 246);
-      doc.rect(65, currentY - 3, Math.floor(100 * score), 4, 'F');
-      
-      doc.setTextColor(15, 23, 42);
+      // Left Logo Header
       doc.setFont("helvetica", "bold");
-      doc.text(`${(score * 100).toFixed(1)}%`, 172, currentY);
-      doc.setFont("helvetica", "normal");
+      doc.setFontSize(22);
+      doc.setTextColor(29, 78, 216); // Royal Blue
+      doc.text("RetinAI", 20, 20);
       
-      currentY += 8;
-    });
-    
-    // Divider - positioned relative to the list end
-    const dividerY = Math.max(252, currentY + 8);
-    doc.setDrawColor(226, 232, 240);
-    doc.line(20, dividerY, 190, dividerY);
-    
-    // Medical Disclaimer footer - dynamically offsets past dividerY
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.setFont("helvetica", "oblique");
-    doc.text("Medical Disclaimer: This AI-generated report is provided for screening research purposes only.", 20, dividerY + 8);
-    doc.text("It does not replace clinical consultation, ophthalmic review, or definitive medical diagnosis.", 20, dividerY + 13);
-    doc.text("Please consult a board-certified ophthalmologist for complete medical evaluation.", 20, dividerY + 18);
-    
-    doc.save(`Clinical_Report_DR_${analysisResult.label.replace(/\s+/g, '_')}.pdf`);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Saving Eyes to Improve Lives", 20, 24);
+      
+      // Right Title Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(29, 78, 216);
+      doc.text("DR LITE", 190, 20, { align: "right" });
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(51, 65, 85);
+      doc.text("Diabetic Retinopathy Screening Report", 190, 25, { align: "right" });
+      
+      // Horizontal Line
+      doc.setDrawColor(226, 232, 240);
+      doc.line(20, 28, 190, 28);
+      
+      // Screening details grid
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(71, 85, 105);
+      
+      // Left Column details
+      doc.text("Screening Date", 20, 36);
+      doc.text("Report Date", 20, 42);
+      doc.text("Service Provider", 20, 48);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      const currentDateStr = new Date().toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' });
+      const currentTimeStr = new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' });
+      doc.text(`:  ${currentDateStr}, ${currentTimeStr}`, 48, 36);
+      doc.text(`:  ${currentDateStr}, ${currentTimeStr}`, 48, 42);
+      doc.text(":  AI Screening Portal", 48, 48);
+      
+      // Right Column details (Auditor details set to minimal/empty)
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(71, 85, 105);
+      doc.text("Auditor Name", 120, 36);
+      doc.text("Auditor Contact", 120, 42);
+      doc.text("Auditor Email", 120, 48);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(15, 23, 42);
+      doc.text(":  -", 148, 36);
+      doc.text(":  -", 148, 42);
+      doc.text(":  -", 148, 48);
+      
+      // Outcome Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(29, 78, 216);
+      doc.text("DIABETIC RETINOPATHY GRADING OUTCOME", 20, 62);
+      doc.line(20, 65, 190, 65);
+      
+      // Add fundus scan image centered
+      const imgWidth = 84;
+      const imgHeight = 72;
+      const imgX = (210 - imgWidth) / 2;
+      const imgY = 71;
+      
+      // Subtle background placeholder / border for image
+      doc.setDrawColor(241, 245, 249);
+      doc.rect(imgX - 0.5, imgY - 0.5, imgWidth + 1, imgHeight + 1, 'S');
+      
+      doc.addImage(img, 'JPEG', imgX, imgY, imgWidth, imgHeight);
+      
+      // Grading Result
+      const resultY = imgY + imgHeight + 10;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Grading Result", 105, resultY, { align: "center" });
+      
+      // Make label and color green/red based on outcome
+      const labelUpper = analysisResult.label.toUpperCase();
+      const isNormal = labelUpper.includes("NO DR") || labelUpper.includes("NORMAL");
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      if (isNormal) {
+        doc.setTextColor(22, 163, 74); // Green
+        doc.text("NORMAL", 105, resultY + 6, { align: "center" });
+        doc.setFontSize(9.5);
+        doc.text("(No apparent retinopathy)", 105, resultY + 11, { align: "center" });
+      } else {
+        doc.setTextColor(220, 38, 38); // Red
+        doc.text(labelUpper, 105, resultY + 6, { align: "center" });
+        doc.setFontSize(9.5);
+        doc.text(`(Stage: ${analysisResult.label})`, 105, resultY + 11, { align: "center" });
+      }
+      
+      // What is Diabetic Retinopathy section (styled box at bottom)
+      const boxY = resultY + 23;
+      doc.setFillColor(248, 250, 252);
+      doc.rect(20, boxY, 170, 22, 'F');
+      doc.setDrawColor(241, 245, 249);
+      doc.rect(20, boxY, 170, 22, 'S');
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(29, 78, 216);
+      doc.text("What is Diabetic Retinopathy?", 25, boxY + 6);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text("It is a medical condition where blood vessels of the retina are damaged by diabetes that potentially leads to blindness.", 25, boxY + 13);
+      
+      // Certification Marks
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text("CE 0197     TGA     ISO 13485:2016", 105, boxY + 36, { align: "center" });
+      
+      // Small Disclaimer text at the bottom
+      doc.setDrawColor(241, 245, 249);
+      doc.line(20, boxY + 42, 190, boxY + 42);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(148, 163, 184);
+      
+      const warningText = "Warning: This report is only an automated diabetic retinopathy screening report based on the colour fundus images from your eyes and AI analysis. A negative result does not indicate a complete absence of referable diabetic retinopathy and patients are strongly encouraged to test again at an appropriate point in the future as recommended by their physician. If the patient has any complaint about their eye or has any other symptoms, he/she should consult their physician for further examinations and recommendations.";
+      const splitWarning = doc.splitTextToSize(warningText, 170);
+      doc.text(splitWarning, 20, boxY + 46);
+      
+      doc.save(`Clinical_Report_DR_${analysisResult.label.replace(/\s+/g, '_')}.pdf`);
+    };
   };
 
   const handleFileChange = async (event) => {
