@@ -1191,7 +1191,20 @@ function Demo() {
       });
 
       if (!response.ok) {
-        throw new Error(`Server error: ${response.statusText || response.status}`);
+        let errMsg = `Server error: ${response.statusText || response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData) {
+            if (errData.message) {
+              errMsg = errData.message;
+            } else if (errData.detail) {
+              errMsg = errData.detail;
+            }
+          }
+        } catch (e) {
+          // Keep default errMsg if response is not JSON
+        }
+        throw new Error(errMsg);
       }
 
       const data = await response.json();

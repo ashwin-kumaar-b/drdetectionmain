@@ -1,9 +1,53 @@
 import io
 import os
+import logging
 from typing import Dict
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+
+# Configure standard production-ready logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s"
+)
+logger = logging.getLogger("DR-Detection-API")
+
+def get_client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "127.0.0.1"
+
+limiter = Limiter(key_func=get_client_ip)
+app = FastAPI(title="DR Detection API")
+app.state.limiter = limiter
+
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please wait before trying again."},
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, StarletteHTTPException):
+        return await http_exception_handler(request, exc)
+    logger.exception("Unexpected error occurred:")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "message": "Prediction failed. Please try again."
+        }
+    )
 
 from PIL import Image
 import numpy as np
@@ -13,7 +57,7 @@ import cv2
 import glob
 from pathlib import Path
 
-app = FastAPI(title="DR Detection API")
+
 
 
 def resolve_model_path() -> str | None:
@@ -43,12 +87,12 @@ if MODEL_PATH:
         SESSION = ort.InferenceSession(MODEL_PATH)
         onnx_input_name = SESSION.get_inputs()[0].name
         onnx_output_name = SESSION.get_outputs()[0].name
-        print(f"Loaded ONNX model: {MODEL_PATH}")
+        logger.info(f"Loaded ONNX model: {MODEL_PATH}")
     except Exception as e:
-        print(f"ONNX model load error: {e}")
+        logger.error(f"ONNX model load error: {e}", exc_info=True)
         SESSION = None
 else:
-    print("ONNX model not found. Set MODEL_PATH or add dr_model.onnx in repo.")
+    logger.warning("ONNX model not found. Set MODEL_PATH or add dr_model.onnx in repo.")
 
 
 CLASS_NAMES = ["No DR", "Mild", "Moderate", "Severe", "Proliferative"]
@@ -86,12 +130,49 @@ class PredictResponse(BaseModel):
     scores: Dict[str, float]
 
 
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png"}
+ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG"}
+
+
 @app.post("/predict", response_model=PredictResponse)
-async def predict(file: UploadFile = File(...)):
+@limiter.limit("10/minute")
+async def predict(request: Request, file: UploadFile = File(...)):
+    # 1. Validate MIME type from Content-Type header
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(status_code=400, detail="Only JPG and PNG images are allowed.")
+
+    # 2. Limit upload size to 5 MB using chunked reading to prevent memory crash/DoS
+    contents = b""
+    while True:
+        chunk = await file.read(1024 * 64)  # 64 KB chunks
+        if not chunk:
+            break
+        contents += chunk
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="Image exceeds maximum file size.")
+
+    # 3. Verify actual file content and format
+    try:
+        image = Image.open(io.BytesIO(contents))
+
+        # Verify actual magic-number-based format detected by PIL
+        if image.format not in ALLOWED_IMAGE_FORMATS:
+            raise HTTPException(status_code=400, detail="Only JPG and PNG images are allowed.")
+
+        # Load the image to force decoding and identify truncation or corruption
+        image.load()
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Uploaded image is corrupted.")
+
+    # 4. Check if ONNX model session is loaded before starting analysis
     if SESSION is None:
         raise HTTPException(status_code=500, detail="ONNX model not loaded")
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents)).convert("RGB")
+
+    # Convert to RGB as needed by the prediction pipeline
+    image = image.convert("RGB")
 
     # Preprocess and run ONNX
     input_data = preprocess_image(image, return_tensor=False)
